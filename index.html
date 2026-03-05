@@ -82,12 +82,13 @@ function SetupScreen({ onDone }) {
   const [apiKey, setApiKey] = useState("");
   const [workerUrl, setWorkerUrl] = useState("");
   const [roomCode, setRoomCode] = useState("");
-
+  const [apiBase, setApiBase] = useState("");
   const submit = () => {
     if (!apiKey.trim().startsWith("sk-")) return alert("请输入有效的 Anthropic API Key（以 sk- 开头）");
     onDone({
       apiKey: apiKey.trim(),
       workerUrl: workerUrl.trim().replace(/\/$/, ""),
+      apiBase: apiBase.trim().replace(/\/$/, ""),
       roomCode: roomCode.trim(),
     });
   };
@@ -101,6 +102,9 @@ function SetupScreen({ onDone }) {
         <a className="setup-link" href="https://console.anthropic.com/keys" target="_blank" rel="noreferrer">→ 前往获取 API Key</a>
         <input className="setup-input mono" type="password" placeholder="sk-ant-..."
           value={apiKey} onChange={e=>setApiKey(e.target.value)} />
+        <div className="setup-label">API 接口地址（可选，默认官方）</div>
+<input className="setup-input mono" type="text" placeholder="https://api.anthropic.com"
+  value={apiBase} onChange={e=>setApiBase(e.target.value)} />
         <div className="setup-divider">── 云同步（可选）──</div>
         <div className="setup-label">Cloudflare Worker 地址</div>
         <input className="setup-input mono" type="text" placeholder="https://samantha-sync.yourname.workers.dev"
@@ -313,13 +317,13 @@ function App() {
     setMessages(newMessages); setNewMsgIndex(newMessages.length-1);
     setInput(""); setIsLoading(true);
     try {
-      const res=await fetch("https://api.anthropic.com/v1/messages",{
+      const res=await fetch(`${settings.apiBase || "https://api.anthropic.com"}/v1/messages`
+,{
         method:"POST",
         headers:{
           "Content-Type":"application/json",
           "x-api-key":settings.apiKey,
           "anthropic-version":"2023-06-01",
-          "anthropic-dangerous-direct-browser-access":"true",
         },
         body:JSON.stringify({
           model:"claude-sonnet-4-20250514", max_tokens:1000,

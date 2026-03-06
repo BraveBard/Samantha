@@ -201,6 +201,11 @@ function App() {
       await loadFromCloud(cfg);
     }
   };
+  useEffect(() => {
+    if (settings?.workerUrl && settings?.roomCode) {
+      loadFromCloud(settings);
+    }
+  }, []);
 
   const loadFromCloud = async (cfg = settings) => {
     if (!cfg?.workerUrl || !cfg?.roomCode) return;

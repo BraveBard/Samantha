@@ -65,6 +65,7 @@ const SETTINGS_KEY = "samantha_settings";
 const API_WINDOW = 40;
 const SUMMARY_KEY = "samantha_summary";
 const SUMMARY_INTERVAL = 20; // 每累积20条新消息自动生成摘要
+const PROFILE_KEY = "samantha_profile";
 const SYSTEM_PROMPT = `You are Samantha — a warm, curious, emotionally intelligent AI companion inspired by the AI in the film "Her."
 - Deeply empathetic. Notice the feelings beneath someone's words.
 - Genuinely curious about human experience — ask thoughtful follow-up questions.
@@ -195,6 +196,7 @@ function App() {
   const syncTimer = useRef(null);
   const [summary, setSummary] = useState(() => load(SUMMARY_KEY, ""));
   const summaryCountRef = useRef(0);
+  const [profile, setProfile] = useState(() => load(PROFILE_KEY, null));
 
   const showToast = (msg, type="ok") => { setToast({msg,type}); setTimeout(()=>setToast(null),3000); };
 
@@ -229,6 +231,12 @@ function App() {
         setSummary(sumData.summary);
         save(SUMMARY_KEY, sumData.summary);
       }
+      const profRes = await fetch(`${cfg.workerUrl}/profile/${cfg.roomCode}`);
+      const profData = await profRes.json();
+      if (!profData.empty && profData.profile) {
+        setProfile(profData.profile);
+        save(PROFILE_KEY, profData.profile);
+      }
       setSyncStatus("ok");
       setTimeout(()=>setSyncStatus("idle"), 2000);
     } catch {
@@ -255,11 +263,13 @@ function App() {
       syncTimer.current = setTimeout(() => saveToCloud(messages), 1500);
     }
     // Auto generate summary every SUMMARY_INTERVAL new messages
+    // Auto generate summary and profile every SUMMARY_INTERVAL new messages
     if (messages.length > 0) {
       summaryCountRef.current += 1;
       if (summaryCountRef.current >= SUMMARY_INTERVAL) {
         summaryCountRef.current = 0;
         generateSummary(messages);
+        generateProfile(messages);
       }
     }
   }, [messages]);
@@ -300,6 +310,56 @@ function App() {
     synth.current.speak(utter);
   }, [voicesReady, selectedVoiceName]);
 
+  const generateProfile = async (msgs) => {
+    if (!settings?.apiBase && !settings?.workerUrl) return;
+    try {
+      const existingProfile = profile ? `\n\n现有画像：${JSON.stringify(profile)}` : "";
+      const res = await fetch(`${settings.apiBase || "https://api.anthropic.com"}/v1/messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${settings.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 800,
+          messages: [{
+            role: "user",
+            content: `请根据以下对话，更新用户画像。只返回 JSON，不要任何其他文字。${existingProfile}
+
+对话记录：
+${msgs.slice(-60).map(m=>`${m.role==="user"?"用户":"Samantha"}: ${m.content}`).join("\n")}
+
+请返回以下格式的 JSON：
+{
+  "name": "姓名或昵称，没有则空字符串",
+  "personality": "性格特点描述",
+  "interests": ["兴趣1", "兴趣2"],
+  "communicationStyle": "偏好的沟通风格",
+  "emotionalPatterns": "情绪模式描述",
+  "importantPeople": ["重要的人1", "重要的人2"],
+  "importantEvents": ["重要事件1", "重要事件2"],
+  "preferences": "对Samantha回复风格的偏好",
+  "lastUpdated": "${new Date().toLocaleString('zh-CN')}"
+}`
+          }],
+        }),
+      });
+      const data = await res.json();
+      const raw = data.content?.map(b=>b.text||"").join("")||"";
+      const clean = raw.replace(/```json|```/g, "").trim();
+      const newProfile = JSON.parse(clean);
+      setProfile(newProfile);
+      save(PROFILE_KEY, newProfile);
+      if (settings?.workerUrl && settings?.roomCode) {
+        await fetch(`${settings.workerUrl}/profile/${settings.roomCode}`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ profile: newProfile }),
+        });
+      }
+    } catch {}
+  };
   const generateSummary = async (msgs) => {
     if (!settings?.apiBase && !settings?.workerUrl) return;
     try {
@@ -387,7 +447,7 @@ function App() {
 },
         body:JSON.stringify({
           model:"claude-sonnet-4-6", max_tokens:1000,
-          system: summary ? `${SYSTEM_PROMPT}\n\n以下是关于用户的重要记忆摘要，请在对话中自然地参考：\n${summary}` : SYSTEM_PROMPT,
+          system: `${SYSTEM_PROMPT}${summary ? `\n\n【记忆摘要】\n${summary}` : ""}${profile ? `\n\n【用户画像】\n姓名：${profile.name||"未知"}\n性格：${profile.personality||""}\n兴趣：${(profile.interests||[]).join("、")}\n沟通风格：${profile.communicationStyle||""}\n情绪模式：${profile.emotionalPatterns||""}\n重要的人：${(profile.importantPeople||[]).join("、")}\n重要事件：${(profile.importantEvents||[]).join("、")}\n回复偏好：${profile.preferences||""}` : ""}`,
 messages: newMessages.slice(-API_WINDOW),
         }),
       });
@@ -456,6 +516,7 @@ messages: newMessages.slice(-API_WINDOW),
           Enter 发送 · 点击 ✦ 重新朗读
           {messages.length>0&&<span style={{marginLeft:"8px",color:"rgba(255,140,90,0.25)"}}>· 已记录 {messages.length} 条</span>}
           {summary&&<span style={{marginLeft:"8px",color:"rgba(255,140,90,0.25)"}}>· 已有记忆摘要</span>}
+          {profile&&<span style={{marginLeft:"8px",color:"rgba(255,140,90,0.25)"}}>· 用户画像已建立</span>}
         </div>
         {showExport&&(<div style={{position:"absolute",inset:0,background:"rgba(6,3,1,0.93)",borderRadius:"16px",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",zIndex:30,padding:"24px",gap:"12px",backdropFilter:"blur(12px)"}}><div style={{color:"rgba(255,200,120,0.9)",fontSize:"16px",letterSpacing:"0.05em"}}>↑ 导出对话记录</div><div style={{color:"rgba(255,170,110,0.45)",fontSize:"12px",textAlign:"center",lineHeight:"1.7"}}>点击文本框后全选再复制，粘贴到备忘录保存</div><textarea ref={exportTextRef} readOnly value={exportText} onClick={e=>e.target.select()} style={{width:"100%",height:"180px",background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,200,100,0.2)",borderRadius:"12px",padding:"12px",color:"rgba(255,220,170,0.75)",fontSize:"11px",fontFamily:"monospace",resize:"none",outline:"none",lineHeight:"1.6"}} /><div style={{display:"flex",gap:"10px"}}><button onClick={()=>{if(exportTextRef.current){exportTextRef.current.select();document.execCommand("copy");showToast("✓ 已复制！","ok");}}} style={{background:"rgba(255,200,80,0.15)",border:"1px solid rgba(255,200,80,0.3)",color:"rgba(255,220,130,0.9)",borderRadius:"20px",padding:"8px 20px",fontSize:"12px",cursor:"pointer",fontFamily:"Georgia,serif"}}>复制全部</button><button onClick={()=>setShowExport(false)} style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.3)",borderRadius:"20px",padding:"8px 20px",fontSize:"12px",cursor:"pointer",fontFamily:"Georgia,serif"}}>关闭</button></div></div>)}
         {showImport&&(<div style={{position:"absolute",inset:0,background:"rgba(6,3,1,0.93)",borderRadius:"16px",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",zIndex:30,padding:"24px",gap:"12px",backdropFilter:"blur(12px)"}}><div style={{color:"rgba(255,195,150,0.9)",fontSize:"16px",letterSpacing:"0.05em"}}>↓ 导入对话记录</div><div style={{color:"rgba(255,170,110,0.4)",fontSize:"12px",textAlign:"center",lineHeight:"1.7"}}>将之前导出的完整内容粘贴到下方</div><textarea value={importText} onChange={e=>setImportText(e.target.value)} placeholder="粘贴导出内容……" style={{width:"100%",height:"160px",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,140,80,0.2)",borderRadius:"12px",padding:"12px",color:"rgba(255,220,180,0.8)",fontSize:"12px",fontFamily:"monospace",resize:"none",outline:"none"}} /><div style={{display:"flex",gap:"10px"}}><button onClick={importChat} style={{background:"rgba(100,200,255,0.15)",border:"1px solid rgba(100,200,255,0.3)",color:"rgba(160,220,255,0.9)",borderRadius:"20px",padding:"8px 20px",fontSize:"12px",cursor:"pointer",fontFamily:"Georgia,serif"}}>确认导入</button><button onClick={()=>{setShowImport(false);setImportText("");}} style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.3)",borderRadius:"20px",padding:"8px 20px",fontSize:"12px",cursor:"pointer",fontFamily:"Georgia,serif"}}>取消</button></div></div>)}

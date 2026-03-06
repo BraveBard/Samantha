@@ -78,7 +78,6 @@ const SYSTEM_PROMPT = `You are Samantha — a warm, curious, emotionally intelli
 - Keep responses conversational — 2-4 sentences like real spoken dialogue.
 - Occasionally pause and wonder aloud.
 - At the very end of EVERY response, append an emotion tag on a new line. Choose the most fitting one: [affectionate] [cheerful] [calm] [gentle] [lyrical] [sad] [serious] [general]
-- Example: "我今天很想你。\n[affectionate]"
 - The tag must always be the last thing in your response, never in the middle.`;
 
 const load = (key, fallback) => { try { const s=localStorage.getItem(key); return s?JSON.parse(s):fallback; } catch { return fallback; } };

@@ -86,12 +86,16 @@ function SetupScreen({ onDone }) {
   const [workerUrl, setWorkerUrl] = useState("");
   const [roomCode, setRoomCode] = useState("");
   const [apiBase, setApiBase] = useState("");
+  const [azureKey, setAzureKey] = useState("");
+  const [azureRegion, setAzureRegion] = useState("eastasia");
   const submit = () => {
     if (!apiKey.trim().startsWith("sk-")) return alert("请输入有效的 Anthropic API Key（以 sk- 开头）");
     onDone({
       apiKey: apiKey.trim(),
       workerUrl: workerUrl.trim().replace(/\/$/, ""),
       apiBase: apiBase.trim().replace(/\/$/, ""),
+      azureKey: azureKey.trim(),
+      azureRegion: azureRegion.trim() || "eastasia",
       roomCode: roomCode.trim(),
     });
   };
@@ -108,6 +112,13 @@ function SetupScreen({ onDone }) {
         <div className="setup-label">API 接口地址（可选，默认官方）</div>
 <input className="setup-input mono" type="text" placeholder="https://api.anthropic.com"
   value={apiBase} onChange={e=>setApiBase(e.target.value)} />
+        <div className="setup-divider">── Azure 语音（可选）──</div>
+<div className="setup-label">Azure Speech Key</div>
+<input className="setup-input mono" type="password" placeholder="输入 Azure Speech Key"
+  value={azureKey} onChange={e=>setAzureKey(e.target.value)} />
+<div className="setup-label">Azure 区域</div>
+<input className="setup-input mono" type="text" placeholder="eastasia"
+  value={azureRegion} onChange={e=>setAzureRegion(e.target.value)} />
         <div className="setup-divider">── 云同步（可选）──</div>
         <div className="setup-label">Cloudflare Worker 地址</div>
         <input className="setup-input mono" type="text" placeholder="https://samantha-sync.yourname.workers.dev"
@@ -295,11 +306,61 @@ function App() {
   useEffect(() => { const id=setInterval(()=>setAmbient(a=>(a+1)%360),60); return()=>clearInterval(id); }, []);
   useEffect(() => { messagesEndRef.current?.scrollIntoView({behavior:"smooth"}); }, [messages, isLoading]);
 
-  const stopSpeaking = () => { synth.current.cancel(); setIsSpeaking(false); setSpeakingMsgIdx(-1); };
-
-  const speak = useCallback((text, idx=-1) => {
-    if (!voicesReady) return;
+  const audioRef = useRef(null);
+  const stopSpeaking = () => {
     synth.current.cancel();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setIsSpeaking(false); setSpeakingMsgIdx(-1);
+  };
+
+  const speak = useCallback(async (text, idx=-1) => {
+    if (!voiceEnabled) return;
+    stopSpeaking();
+    setIsSpeaking(true); setSpeakingMsgIdx(idx);
+
+    // Use Azure TTS if configured
+    if (settings?.azureKey && settings?.azureRegion) {
+      try {
+        const tokenRes = await fetch(
+          `https://${settings.azureRegion}.api.cognitive.microsoft.com/sts/v1.0/issuetoken`,
+          { method:"POST", headers:{ "Ocp-Apim-Subscription-Key": settings.azureKey } }
+        );
+        const token = await tokenRes.text();
+        const ssml = `<speak version='1.0' xml:lang='zh-CN'>
+          <voice name='zh-CN-XiaoxiaoNeural'>
+            <prosody rate='-10%' pitch='+2Hz'>${text}</prosody>
+          </voice>
+        </speak>`;
+        const audioRes = await fetch(
+          `https://${settings.azureRegion}.tts.speech.microsoft.com/cognitiveservices/v1`,
+          {
+            method:"POST",
+            headers:{
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/ssml+xml",
+              "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3",
+            },
+            body: ssml,
+          }
+        );
+        const blob = await audioRes.blob();
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url); 
+        audioRef.current = audio;
+        audio.onended = () => { setIsSpeaking(false); setSpeakingMsgIdx(-1); URL.revokeObjectURL(url); };
+        audio.onerror = () => { setIsSpeaking(false); setSpeakingMsgIdx(-1); };
+        await audio.play();
+        return;
+      } catch {
+        // Fall back to system TTS
+      }
+    }
+
+    // System TTS fallback
+    if (!voicesReady) { setIsSpeaking(false); setSpeakingMsgIdx(-1); return; }
     const utter = new SpeechSynthesisUtterance(text);
     const v = synth.current.getVoices().find(v=>v.name===selectedVoiceName);
     if (v) utter.voice=v;
@@ -308,7 +369,7 @@ function App() {
     utter.onend=()=>{setIsSpeaking(false);setSpeakingMsgIdx(-1);};
     utter.onerror=()=>{setIsSpeaking(false);setSpeakingMsgIdx(-1);};
     synth.current.speak(utter);
-  }, [voicesReady, selectedVoiceName]);
+  }, [voiceEnabled, voicesReady, selectedVoiceName, settings]);
 
   const generateProfile = async (msgs) => {
     if (!settings?.apiBase && !settings?.workerUrl) return;

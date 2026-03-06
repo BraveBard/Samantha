@@ -486,7 +486,7 @@ ${msgs.slice(-60).map(m=>`${m.role==="user"?"用户":"Samantha"}: ${m.content}`)
   };
 
   const clearMemory = async () => {
-    if(!window.confirm("清除所有记忆和对话记录？")) return;
+    if(!window.confirm("清除所有记忆和对话记录?")) return;
     if(settings?.workerUrl&&settings?.roomCode){
       try { await fetch(`${settings.workerUrl}/sync/${settings.roomCode}`,{method:"DELETE"}); } catch {}
     }
@@ -567,11 +567,11 @@ messages: newMessages.slice(-API_WINDOW),
             <button onClick={exportChat} disabled={!messages.length} style={{background:"rgba(255,200,100,0.07)",border:"1px solid rgba(255,200,100,0.15)",color:messages.length?"rgba(255,200,120,0.65)":"rgba(255,200,100,0.15)",borderRadius:"20px",padding:"4px 9px",fontSize:"10px",cursor:messages.length?"pointer":"default",fontFamily:"Georgia,serif"}}>↑ 导出</button>
             <button onClick={()=>setShowImport(true)} style={{background:"rgba(100,200,255,0.06)",border:"1px solid rgba(100,200,255,0.15)",color:"rgba(140,210,255,0.55)",borderRadius:"20px",padding:"4px 9px",fontSize:"10px",cursor:"pointer",fontFamily:"Georgia,serif"}}>↓ 导入</button>
             <button onClick={clearMemory} style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.08)",color:"rgba(255,255,255,0.2)",borderRadius:"20px",padding:"4px 9px",fontSize:"10px",cursor:"pointer",fontFamily:"Georgia,serif"}}>🗑 清除</button>
-            <button onClick={()=>{if(window.confirm("重新配置？")){{try{localStorage.removeItem(SETTINGS_KEY);}catch{}}setSettings(null);}}} style={{background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.06)",color:"rgba(255,255,255,0.15)",borderRadius:"20px",padding:"4px 9px",fontSize:"10px",cursor:"pointer",fontFamily:"Georgia,serif"}}>⚙ 设置</button>
+            <button onClick={()=>{if(window.confirm("重新配置?")){{try{localStorage.removeItem(SETTINGS_KEY);}catch{}}setSettings(null);}}} style={{background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.06)",color:"rgba(255,255,255,0.15)",borderRadius:"20px",padding:"4px 9px",fontSize:"10px",cursor:"pointer",fontFamily:"Georgia,serif"}}>⚙ 设置</button>
           </div>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"10px 6px",marginTop:"4px"}}>
-          {messages.length===0&&(<div style={{textAlign:"center",color:"rgba(255,175,120,0.3)",marginTop:"50px",fontSize:"15px",lineHeight:"2.2",fontStyle:"italic"}}><div>嗨，我在这里。</div><div style={{fontSize:"13px"}}>今天，你想聊什么？</div></div>)}
+          {messages.length===0&&(<div style={{textAlign:"center",color:"rgba(255,175,120,0.3)",marginTop:"50px",fontSize:"15px",lineHeight:"2.2",fontStyle:"italic"}}><div>嗨，我在这里。</div><div style={{fontSize:"13px"}}>今天，你想聊什么?</div></div>)}
           {messages.map((msg,i)=>(<Message key={i} msg={msg} isNew={i===newMsgIndex} onSpeak={(t,e)=>speak(t,i,e)} isSpeaking={speakingMsgIdx===i&&isSpeaking} />))}
           {isLoading&&(<div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"16px"}}><div style={{width:"28px",height:"28px",borderRadius:"50%",background:"radial-gradient(circle at 35% 35%, #ff9966, #c0392b)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"11px",animation:"pulse 1s ease-in-out infinite"}}>✦</div><div style={{color:"rgba(255,180,130,0.45)",fontSize:"13px",fontStyle:"italic"}}>Samantha 正在思考…</div></div>)}
           <div ref={messagesEndRef} />

@@ -502,6 +502,12 @@ ${msgs.slice(-60).map(m=>`${m.role==="user"?"用户":"Samantha"}: ${m.content}`)
 
   const sendMessage = async () => {
     if(!input.trim()||isLoading) return;
+    // Unlock audio on iOS Safari at the moment of user interaction
+if(!audioUnlockedRef.current){
+  const a = new Audio();
+  a.play().catch(()=>{});
+  audioUnlockedRef.current = true;
+}
     stopSpeaking();
     const userMsg={role:"user",content:input.trim()};
     const newMessages=[...messages,userMsg];

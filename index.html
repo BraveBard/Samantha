@@ -309,6 +309,7 @@ function App() {
   useEffect(() => { messagesEndRef.current?.scrollIntoView({behavior:"smooth"}); }, [messages, isLoading]);
 
   const audioRef = useRef(null);
+  const azureTokenRef = useRef({ token: "", expiry: 0 });
   const stopSpeaking = () => {
     synth.current.cancel();
     if (audioRef.current) {
@@ -326,11 +327,15 @@ function App() {
     // Use Azure TTS if configured
     if (settings?.azureKey && settings?.azureRegion) {
       try {
-        const tokenRes = await fetch(
-          `https://${settings.azureRegion}.api.cognitive.microsoft.com/sts/v1.0/issuetoken`,
-          { method:"POST", headers:{ "Ocp-Apim-Subscription-Key": settings.azureKey } }
-        );
-        const token = await tokenRes.text();
+        let token = azureTokenRef.current.token;
+        if (!token || Date.now() > azureTokenRef.current.expiry) {
+          const tokenRes = await fetch(
+            `https://${settings.azureRegion}.api.cognitive.microsoft.com/sts/v1.0/issuetoken`,
+            { method:"POST", headers:{ "Ocp-Apim-Subscription-Key": settings.azureKey } }
+          );
+          token = await tokenRes.text();
+          azureTokenRef.current = { token, expiry: Date.now() + 9 * 60 * 1000 };
+        }
         const ssml = `<speak version='1.0' xml:lang='zh-CN'>
           <voice name='zh-CN-XiaoxiaoNeural'>
             <mstts:express-as style='${emotion}' xmlns:mstts='https://www.w3.org/2001/mstts'>
